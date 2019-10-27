@@ -1,0 +1,17 @@
+kind: "BuildConfig"
+apiVersion: "v1"
+metadata:
+  name: "nodejs-sample-pipeline"
+spec:
+  source:
+    git:
+      uri: "https://github.com/anyrepo/hello-world"
+  strategy:
+    jenkinsPipelineStrategy:
+      jenkinsfilePath: jenkinsfile.groovy
+    type: JenkinsPipeline
+  env:
+    - name: "GIT_SOURCE_URL"
+      value: "https://github.com/anyrepo/hello-world"
+    - name: "GIT_SOURCE_REF"
+      value: "master"

@@ -1,0 +1,164 @@
+apiVersion: v1
+kind: Template
+metadata:
+  creationTimestamp: null
+  name: my-api-template
+  labels:
+    app: my-api
+    project: my-api
+
+parameters:
+- name: DOCKER_IMAGE_TAG
+  description: The docker image tag of the main container. Gets passed to every template automatically.
+  required: true
+- name: KUBERNETES_NAMESPACE
+  description: The kubernetes namespace, used for resolving images located in the namespace image repository. Gets passed to every template automatically.
+  required: true
+- name: MY_API_SPRING_PROFILE_ACTIVE
+  required: true
+
+objects:
+
+##### DeploymentConfigs
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: my-api
+      project: my-api
+    name: my-api
+  spec:
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      deploymentconfig: my-api
+    strategy:
+      activeDeadlineSeconds: 21600
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: my-api
+          deploymentconfig: my-api
+          project: my-api
+      spec:
+        containers:
+          - env:
+              - name: KUBERNETES_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+              - name: SPRING_PROFILES_ACTIVE
+                valueFrom:
+                  configMapKeyRef:
+                    key: spring.profile.active
+                    name: my-api-config
+            image: artifactory.mydomain.com/docker-local/my-api:${DOCKER_IMAGE_TAG}
+            imagePullPolicy: Always
+            livenessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /system/status
+                port: 8081
+                scheme: HTTP
+              initialDelaySeconds: 180
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 1
+            name: my-api
+            ports:
+              - containerPort: 8778
+                name: jolokia
+                protocol: TCP
+              - containerPort: 8081
+                name: http
+                protocol: TCP
+            readinessProbe:
+              failureThreshold: 3
+              httpGet:
+                path: /status
+                port: 8081
+                scheme: HTTP
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              successThreshold: 1
+              timeoutSeconds: 1
+            resources:
+              limits:
+                cpu: '1'
+                memory: '1G'
+              requests:
+                cpu: '250m'
+                memory: '512Mi'
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+    test: false
+    triggers: []
+  status: {}
+
+##### ConfigMaps
+- apiVersion: v1
+  data:
+    spring.profile.active: ${MY_API_MOCK_SPRING_PROFILE_ACTIVE}
+  kind: ConfigMap
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: my-api
+    name: my-api
+
+##### Services
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: my-api
+      project: my-api
+    name: my-api
+  spec:
+    ports:
+      -
+        name: 8081-tcp
+        port: 8081
+        protocol: TCP
+        targetPort: 8081
+    selector:
+      deploymentconfig: my-api
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+
+##### Routes
+- apiVersion: v1
+  kind: Route
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: my-api
+      project: my-api
+    name:  my-api
+  spec:
+    port:
+      targetPort: 8081-tcp
+    tls:
+      termination: edge
+    to:
+      kind: Service
+      name: my-api
+  status: {}
